@@ -7,7 +7,7 @@ import (
 )
 
 func Write(conn net.Conn, m message.Message) error{
-	data, err := m.ToBytes()
+	data, err := message.ToBytes(m)
 	if err != nil {
 		return fmt.Errorf("converting message to bytes: %v", err)
 	}
@@ -27,7 +27,7 @@ func Read(conn net.Conn, m message.Message) error {
 		return fmt.Errorf("reading message: %v", err)
 	}
 
-	err = m.Parse(data[:n])
+	err = message.Parse(m, data[:n])
 	if err != nil {
 		return fmt.Errorf("parsing message: %v", err)
 	}
@@ -36,7 +36,7 @@ func Read(conn net.Conn, m message.Message) error {
 }
 
 func WriteTo(conn net.PacketConn, addr net.Addr, m message.Message) error{
-	data, err := m.ToBytes()
+	data, err := message.ToBytes(m)
 	if err != nil {
 		return fmt.Errorf("converting message to bytes: %v", err)
 	}
@@ -56,7 +56,7 @@ func ReadFrom(conn net.PacketConn, m message.Message) (net.Addr, error) {
 		return nil, fmt.Errorf("reading message: %v", err)
 	}
 
-	err = m.Parse(data[:n])
+	err = message.Parse(m, data[:n])
 	if err != nil {
 		return nil, fmt.Errorf("parsing message: %v", err)
 	}
