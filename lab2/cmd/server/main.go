@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/joho/godotenv"
 	"lab2/cmd/server/internal/controller"
 	"lab2/cmd/server/store/block"
 	"lab2/cmd/server/store/user"
@@ -10,14 +11,26 @@ import (
 	"lab2/internal/udp"
 	"log"
 	"net"
+	"os"
 )
 
-const (
-	serverAddr = "127.0.0.1:8080"
+var (
+	Port string
 )
 
 func main() {
-	err := user.Init()
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Println(".env file not loaded")
+		err = nil
+	}
+	if p, ok := os.LookupEnv("PORT"); ok {
+		Port = p
+	} else {
+		log.Fatal("PORT env is absent")
+	}
+
+	err = user.Init()
 	if err != nil {
 		log.Fatalf("error initing store: %s", err)
 	}
@@ -34,7 +47,7 @@ func main() {
 	}()
 	
 	
-	TCPAddr, err := net.ResolveUDPAddr("udp", serverAddr)
+	TCPAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("127.0.0.1:%v", Port))
 	if err != nil {
 		log.Fatalf("resolving UDP address: %s", err)
 	}
@@ -51,7 +64,7 @@ func main() {
 		}
 	}(conn)
 	
-	log.Println("UDP server is listening on", serverAddr)
+	log.Println("UDP server is listening")
 
 	for {
 		m := &message.Request{}

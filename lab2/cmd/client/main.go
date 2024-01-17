@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"github.com/joho/godotenv"
 	"lab2/internal/constants"
 	"lab2/internal/message"
 	"lab2/internal/term"
@@ -18,12 +19,22 @@ import (
 var (
 	nameFlag string
 	passwordFlag string
-)
-const (
-	serverAddr = "127.0.0.1:8080"
+	ServerAddr string
 )
 
 func main() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Println(".env file not loaded")
+		err = nil
+	}
+	if s, ok := os.LookupEnv("SERVER_ADDR"); ok {
+		ServerAddr = s
+	} else {
+		log.Fatal("PORT env is absent")
+	}
+
+
 	flag.StringVar(&nameFlag, "n", "", "user name")
 	flag.StringVar(&passwordFlag, "p", "", "user password")
 	flag.Parse()
@@ -34,7 +45,7 @@ func main() {
 		passwordFlag = term.ReadVar("password", true)
 	}
 	
-	conn, err := net.Dial("udp", serverAddr)
+	conn, err := net.Dial("udp", ServerAddr)
 	if err != nil {
 		log.Fatalf("connecting to server: %s", err)
 	}
