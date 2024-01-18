@@ -47,7 +47,7 @@ func main() {
 	}()
 	
 	
-	TCPAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("127.0.0.1:%v", Port))
+	TCPAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("0.0.0.0:%v", Port))
 	if err != nil {
 		log.Fatalf("resolving UDP address: %s", err)
 	}
