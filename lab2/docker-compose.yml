@@ -3,7 +3,7 @@ services:
     client:
         build:
             context: ./
-            dockerfile: Dockerfile
+            dockerfile: DockerfileClient
             args:
                 SERVICE: client
         tty: true
