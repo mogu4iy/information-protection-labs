@@ -1,17 +1,21 @@
 package main
 
 import (
-	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/joho/godotenv"
+	"lab2/cmd/client/controller"
+	kdcs "lab2/cmd/client/kdc"
+	"lab2/cmd/client/ui"
 	"lab2/internal/constants"
-	"lab2/internal/message"
+	"lab2/internal/kdc"
 	"lab2/internal/term"
 	"lab2/internal/udp"
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,21 +23,69 @@ import (
 var (
 	nameFlag string
 	passwordFlag string
-	ServerAddr string
+	serverAddr string
+	kdcAddr string
+	IDServer int
 )
 
 func main() {
-	err := godotenv.Load(".env")
+	err := godotenv.Load(".env.client")
 	if err != nil {
 		log.Println(".env file not loaded")
 		err = nil
 	}
 	if s, ok := os.LookupEnv("SERVER_ADDR"); ok {
-		ServerAddr = s
+		serverAddr = s
 	} else {
-		log.Fatal("PORT env is absent")
+		log.Fatal("SERVER_ADDR env is absent")
+	}
+	if s, ok := os.LookupEnv("KDC_ADDR"); ok {
+		kdcAddr = s
+	} else {
+		log.Fatal("KDC_ADDR env is absent")
+	}
+	if s, ok := os.LookupEnv("ID_SERVER"); ok {
+		IDServer, err = strconv.Atoi(s)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		log.Fatal("ID_SERVER env is absent")
+	}
+	if s, ok := os.LookupEnv("ID_CLIENT"); ok {
+		kdcs.Service.ID, err = strconv.Atoi(s)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		log.Fatal("ID_CLIENT env is absent")
+	}
+	if s, ok := os.LookupEnv("MASTER_KEY"); ok {
+		kdcs.Service.MasterKey = s
+	} else {
+		log.Fatal("MASTER_KEY env is absent")
 	}
 
+	sessionKeyData, err := getSessionKey()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn, err := net.Dial("tcp", serverAddr)
+	if err != nil {
+		log.Fatal("connecting to server: ", err)
+	}
+	defer func(conn net.Conn) {
+		err = conn.Close()
+		if err != nil {
+			log.Fatalf("closing connection: %s", err)
+		}
+	}(conn)
+
+	err = controller.Handshake(conn, sessionKeyData)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	flag.StringVar(&nameFlag, "n", "", "user name")
 	flag.StringVar(&passwordFlag, "p", "", "user password")
@@ -44,212 +96,18 @@ func main() {
 	if !isFlagPassed("p") {
 		passwordFlag = term.ReadVar("password", true)
 	}
-	
-	conn, err := net.Dial("udp", ServerAddr)
-	if err != nil {
-		log.Fatalf("connecting to server: %s", err)
-	}
-	defer func(conn net.Conn) {
-		err = conn.Close()
-		if err != nil {
-			log.Fatalf("closing connection: %s", err)
-		}
-	}(conn)
-	
-	authRequest := &message.Request{
-		Command: constants.AUTH_M,
-		Data: fmt.Sprintf("%v:%v", nameFlag, passwordFlag),
-	}
-	err = udp.Write(conn, authRequest)
-	if err != nil {
+
+	err = controller.Auth(conn, nameFlag, passwordFlag)
+	if err != nil{
 		log.Fatal(err)
 	}
-	
-	authResponse := &message.Response{}
-	err = udp.Read(conn, authResponse)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if !authResponse.Success {
-		log.Fatal(authResponse.Message)
-	}
-	switch authResponse.Data {
-	case constants.ADMIN_MODE:
-		adminMode(conn)
-		return
-	case constants.USER_MODE:
-		userMode(conn)
-		return
-	default:
-		log.Fatalf("unsupported mode received: %v", authResponse.Data)
-	}
-}
+	time.Sleep(3 * time.Second)
+	if nameFlag == constants.AdminUser {
+		ui.Admin(conn)
 
-func adminMode(conn net.Conn) {
-	for {
-		clearTerminal()
-		fmt.Print("Menu:\n1. Change password\n2. Create user\n3. Block user\n4. Logout\nEnter your choice: ")
-		choice := readInput()
-		clearTerminal()
-		switch choice {
-		case "1":
-			oldPassword := term.ReadVar("old password", false)
-			password := term.ReadVar("password", true)
-			request := &message.Request{
-				Command: constants.UPDATE_PASSWORD_M,
-				Data: fmt.Sprintf("%v:%v", oldPassword, password),
-			}
-			err := udp.Write(conn, request)
-			if err != nil {
-				log.Fatal(err)
-			}
-			response := &message.Response{}
-			err = udp.Read(conn, response)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !response.Success {
-				log.Println(response.Message)
-			} else {
-				log.Println("Success!")
-			}
-			time.Sleep(3 * time.Second)
-			continue
-		case "2":
-			name := term.ReadVar("name", false)
-			password := term.ReadVar("password", true)
-			request := &message.Request{
-				Command: constants.CREATE_USER_M,
-				Data: fmt.Sprintf("%v:%v", name, password),
-			}
-			err := udp.Write(conn, request)
-			if err != nil {
-				log.Fatal(err)
-			}
-			response := &message.Response{}
-			err = udp.Read(conn, response)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !response.Success {
-				log.Println(response.Message)
-			} else {
-				log.Println("Success!")
-			}
-			time.Sleep(3 * time.Second)
-			continue
-		case "3":
-			name := term.ReadVar("name", false)
-			request := &message.Request{
-				Command: constants.BLOCK_USER_M,
-				Data: name,
-			}
-			err := udp.Write(conn, request)
-			if err != nil {
-				log.Fatal(err)
-			}
-			response := &message.Response{}
-			err = udp.Read(conn, response)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !response.Success {
-				log.Println(response.Message)
-			} else {
-				log.Println("Success!")
-			}
-			time.Sleep(3 * time.Second)
-			continue
-		case "4":
-			request := &message.Request{
-				Command: constants.STOP_M,
-			}
-			err := udp.Write(conn, request)
-			if err != nil {
-				log.Fatal(err)
-			}
-			response := &message.Response{}
-			err = udp.Read(conn, response)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !response.Success {
-				log.Println(response.Message)
-			} else {
-				log.Println("Success!")
-			}
-			return
-		default:
-			fmt.Println("Invalid choice. Try again.")
-		}
+	} else {
+		ui.User(conn)
 	}
-}
-
-func userMode(conn net.Conn) {
-	for {
-		clearTerminal()
-		fmt.Print("Menu:\n1. Change password\n2. Get document\n3. Logout\nEnter your choice: ")
-		choice := readInput()
-		clearTerminal()
-		switch choice {
-		case "1":
-			oldPassword := term.ReadVar("old password", false)
-			password := term.ReadVar("password", true)
-			request := &message.Request{
-				Command: constants.UPDATE_PASSWORD_M,
-				Data: fmt.Sprintf("%v:%v", oldPassword, password),
-			}
-			err := udp.Write(conn, request)
-			if err != nil {
-				log.Fatal(err)
-			}
-			response := &message.Response{}
-			err = udp.Read(conn, response)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !response.Success {
-				log.Println(response.Message)
-			} else {
-				log.Println("Success!")
-			}
-			time.Sleep(3 * time.Second)
-			continue
-		case "2":
-			continue
-		case "3":
-			request := &message.Request{
-				Command: constants.STOP_M,
-			}
-			err := udp.Write(conn, request)
-			if err != nil {
-				log.Fatal(err)
-			}
-			response := &message.Response{}
-			err = udp.Read(conn, response)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if !response.Success {
-				log.Println(response.Message)
-			} else {
-				log.Println("Success!")
-			}
-			return
-		default:
-			fmt.Println("Invalid choice. Try again.")
-		}
-	}
-}
-
-func clearTerminal() {
-	fmt.Print("\033c")
-}
-
-func readInput() string {
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	return strings.TrimSpace(input)
 }
 
 func isFlagPassed(name string) bool {
@@ -260,4 +118,52 @@ func isFlagPassed(name string) bool {
 		}
 	})
 	return found
+}
+
+func getSessionKey() (string, error) {
+	conn, err := net.Dial("udp", kdcAddr)
+	if err != nil {
+		log.Fatal("connecting to KDC server: ", err)
+	}
+
+	r1 := kdc.GenerateRandomNumber(0, 100)
+	kdcData, err := kdc.Encrypt([]byte(kdcs.Service.MasterKey), []byte(fmt.Sprintf("%d:%d", r1, IDServer)))
+	if err != nil {
+		return "", err
+	}
+
+	request := []byte(fmt.Sprintf("%d:%s", kdcs.Service.ID, kdcData))
+	err = udp.Write(conn, request)
+	if err != nil {
+		return "", err
+	}
+	response, err := udp.Read(conn)
+	if err != nil {
+		return "", err
+	}
+
+	sessionKeyData, err := kdc.Decrypt([]byte(kdcs.Service.MasterKey), response)
+	if err != nil {
+		return "", err
+	}
+	sessionKeyDataString := string(sessionKeyData)
+	sessionKeyDataArray := strings.Split(sessionKeyDataString, ":")
+
+	r1Func, err := strconv.Atoi(sessionKeyDataArray[0])
+	if err != nil {
+		return "", err
+	}
+	if kdc.RandFunc(r1) != r1Func {
+		return "", errors.New("f(r1) not match")
+	}
+	kdcs.Service.SessoinKey = sessionKeyDataArray[1]
+	IDB, err := strconv.Atoi(sessionKeyDataArray[2])
+	if err != nil {
+		return "", err
+	}
+	if IDServer != IDB {
+		return "", errors.New("IDServer not match")
+	}
+
+	return sessionKeyDataArray[3], nil
 }

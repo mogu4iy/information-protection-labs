@@ -1,1 +1,4 @@
 db
+.env.client
+.env.server
+.env.kdc

@@ -19,7 +19,7 @@ func ReadVar(key string, hide bool) (value string) {
 			}
 			value = string(password)
 		}else {
-			value = readInput()
+			value = ReadInput()
 		}
 		if value == "" {
 			fmt.Printf("\nInvalid %s. Try again.\n", key)
@@ -27,12 +27,16 @@ func ReadVar(key string, hide bool) (value string) {
 			break
 		}
 	}
-	fmt.Println()
 	return
 }
 
-func readInput() string {
+func ReadInput() string {
 	reader := bufio.NewReader(os.Stdin)
 	input, _ := reader.ReadString('\n')
 	return strings.TrimSpace(input)
 }
+
+func Clear() {
+	fmt.Print("\033c")
+}
+

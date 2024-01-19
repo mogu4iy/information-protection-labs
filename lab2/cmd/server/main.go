@@ -3,31 +3,46 @@ package main
 import (
 	"fmt"
 	"github.com/joho/godotenv"
-	"lab2/cmd/server/internal/controller"
-	"lab2/cmd/server/store/block"
-	"lab2/cmd/server/store/user"
+	"lab2/cmd/server/controller"
+	"lab2/cmd/server/internal/auth"
+	kdcs "lab2/cmd/server/kdc"
+	"lab2/cmd/server/user"
 	"lab2/internal/constants"
 	"lab2/internal/message"
-	"lab2/internal/udp"
+	"lab2/internal/tcp"
 	"log"
 	"net"
 	"os"
+	"strconv"
 )
 
 var (
-	Port string
+	port string
 )
 
 func main() {
-	err := godotenv.Load(".env")
+	err := godotenv.Load(".env.server")
 	if err != nil {
 		log.Println(".env file not loaded")
 		err = nil
 	}
 	if p, ok := os.LookupEnv("PORT"); ok {
-		Port = p
+		port = p
 	} else {
 		log.Fatal("PORT env is absent")
+	}
+	if s, ok := os.LookupEnv("ID_SERVER"); ok {
+		kdcs.Service.ID, err = strconv.Atoi(s)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		log.Fatal("ID_SERVER env is absent")
+	}
+	if s, ok := os.LookupEnv("MASTER_KEY"); ok {
+		kdcs.Service.MasterKey = s
+	} else {
+		log.Fatal("MASTER_KEY env is absent")
 	}
 
 	err = user.Init()
@@ -38,77 +53,76 @@ func main() {
 		_ = user.Store.Close()
 	}()
 	
-	err = block.Init()
+	TCPAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-		log.Fatalf("error initing store: %s", err)
-	}
-	defer func() {
-		_ = block.Store.Close()
-	}()
-	
-	
-	TCPAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("127.0.0.1:%v", Port))
-	if err != nil {
-		log.Fatalf("resolving UDP address: %s", err)
+		log.Fatalf("resolving TCP address: %s", err)
 	}
 	
-	conn, err := net.ListenUDP("udp", TCPAddr)
+	listener, err := net.ListenTCP("tcp", TCPAddr)
 	if err != nil {
-		log.Fatalf("listening: %s", err)
-		return
+		log.Fatalf("creating listener: %s", err)
 	}
-	defer func(conn net.Conn) {
-		err = conn.Close()
-		if err != nil {
-			log.Fatalf("closing connection: %s", err)
-		}
-	}(conn)
-	
-	log.Println("UDP server is listening")
+	defer func(listener *net.TCPListener) {
+		listener.Close()
+	}(listener)
+
+	log.Println("TCP server is listening")
 
 	for {
-		m := &message.Request{}
-		addr, err := udp.ReadFrom(conn, m)
+		conn, err := listener.Accept()
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		go handleRequest(conn, addr, m)
+		log.Println(conn.RemoteAddr())
+		go handleConnection(conn)
 	}
 }
 
-func handleRequest(conn net.PacketConn, addr net.Addr, m *message.Request) {
-	d, err := router(conn,addr, m)
-	data := &message.Response{
-		Data: d,
-	}
-	if err != nil {
-		data.Success = false
-		data.Message = err.Error()
-	} else {
-		data.Success = true
-	}
-	err = udp.WriteTo(conn, addr, data)
-	if err != nil {
-		log.Println(err)
-		return 
+func handleConnection(conn net.Conn) {
+	defer func(conn net.Conn) {
+		auth.Logout(conn.RemoteAddr().String())
+		conn.Close()
+	}(conn)
+	for {
+		m := &message.Request{}
+		sessionKey := kdcs.Service.Users[conn.RemoteAddr().String()].SessionKey
+		err := tcp.Read(conn, m, sessionKey)
+		if err != nil {
+			log.Println("reading: ",err)
+			return
+		}
+		d, err := router(conn, m)
+		data := &message.Response{
+			Data: d,
+		}
+		if err != nil {
+			data.Success = false
+			data.Data = err.Error()
+		} else {
+			data.Success = true
+		}
+		err = tcp.Write(conn, data, sessionKey)
+		if err != nil {
+			return
+		}
 	}
 }
 
-func router(conn net.PacketConn, addr net.Addr, m *message.Request) (interface{}, error) {
+func router(conn net.Conn, m *message.Request) (interface{}, error) {
 	switch m.Command {
-	case constants.AUTH_M:
-		return controller.HandleAuth(conn, addr, m.Data)
-	case constants.CREATE_USER_M:
-		return controller.HandleCreateUser(conn, addr, m.Data)
-	case constants.UPDATE_PASSWORD_M:
-		return controller.HandleUpdatePassword(conn, addr, m.Data)
-	case constants.BLOCK_USER_M:
-		return controller.HandleBlockUser(conn, addr, m.Data)
-	case constants.GET_DOC_M:
-		return controller.HandleGetDoc(conn, addr, m.Data)
-	case constants.STOP_M:
-		return controller.HandleStop(conn, addr)
+	case constants.HNDSHKM:
+		return controller.HandleHandshake(conn, m.Data)
+	case constants.AuthM:
+		return controller.HandleAuth(conn, m.Data)
+	case constants.CreateUserM:
+		return controller.HandleCreateUser(conn, m.Data)
+	case constants.UpdatePasswordM:
+		return controller.HandleUpdatePassword(conn, m.Data)
+	case constants.BlockUserM:
+		return controller.HandleBlockUser(conn, m.Data)
+//	case constants.GetDocM:
+//		return controller.HandleGetDoc(conn, m.Data)
 	default:
 		return nil, fmt.Errorf("method not allowed")
 	}

@@ -5,8 +5,7 @@ import (
 	"log"
 )
 
-
-func Init(path string, migrations map[string][]byte) (s *scdb.Store, err error) {
+func New(path string, migrations map[string][]byte) (s *scdb.Store, err error) {
 	var maxKeys uint64 = 1_000_000
 	var redundantBlocks uint16 = 1
 	var poolCapacity uint64 = 10

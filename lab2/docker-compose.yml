@@ -9,10 +9,16 @@ services:
         tty: true
         environment:
             SERVER_ADDR: server:7700
+            KDC_ADDR: kdc:8800
+            ID_SERVER: 1
+            ID_CLIENT: 2
+            MASTER_KEY: s45lbZd4hB1zhaLHofhyzh5BShRpH5Wv
         networks:
             - service-network
         depends_on:
             server:
+                condition: service_started
+            kdc:
                 condition: service_started
     server:
         build:
@@ -23,6 +29,23 @@ services:
         tty: true
         environment:
             PORT: 7700
+            KDC_ADDR: kdc:8800
+            ID_SERVER: 1
+            MASTER_KEY: nr2bmdeOOYimz48GV7hua26qRMtfKEFZ
+        networks:
+            - service-network
+        depends_on:
+             kdc:
+                condition: service_started
+    kdc:
+        build:
+            context: ./
+            dockerfile: Dockerfile
+            args:
+                SERVICE: kdc
+        tty: true
+        environment:
+            PORT: 8800
         networks:
             - service-network
 networks:
