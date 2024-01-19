@@ -127,12 +127,12 @@ func getSessionKey() (string, error) {
 	}
 
 	r1 := kdc.GenerateRandomNumber(0, 100)
-	kdcData, err := kdc.Encrypt([]byte(kdcs.Service.MasterKey), []byte(fmt.Sprintf("%d:%d", r1, IDServer)))
+	kdcData, err := kdc.Encrypt([]byte(kdcs.Service.MasterKey), []byte(fmt.Sprintf("%d:::%d", r1, IDServer)))
 	if err != nil {
 		return "", err
 	}
 
-	request := []byte(fmt.Sprintf("%d:%s", kdcs.Service.ID, kdcData))
+	request := []byte(fmt.Sprintf("%d:::%s", kdcs.Service.ID, kdcData))
 	err = udp.Write(conn, request)
 	if err != nil {
 		return "", err
@@ -147,7 +147,7 @@ func getSessionKey() (string, error) {
 		return "", err
 	}
 	sessionKeyDataString := string(sessionKeyData)
-	sessionKeyDataArray := strings.Split(sessionKeyDataString, ":")
+	sessionKeyDataArray := strings.Split(sessionKeyDataString, ":::")
 
 	r1Func, err := strconv.Atoi(sessionKeyDataArray[0])
 	if err != nil {

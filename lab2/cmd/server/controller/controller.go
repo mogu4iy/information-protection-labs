@@ -9,7 +9,6 @@ import (
 	"lab2/cmd/server/user"
 	"lab2/internal/constants"
 	"lab2/internal/kdc"
-	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -69,7 +68,7 @@ func HandleHandshake(conn net.Conn, data interface{}) (interface{}, error) {
 		return nil, err
 	}
 	
-	requestData := strings.Split(string(dataBytes),":")
+	requestData := strings.Split(string(dataBytes),":::")
 	serverData := requestData[0]
 	sessionData := requestData[1]
 	
@@ -78,7 +77,7 @@ func HandleHandshake(conn net.Conn, data interface{}) (interface{}, error) {
 		return nil, err
 	}
 	serverDataDecryptedStirng := string(serverDataDecrypted)
-	serverDataArray := strings.Split(serverDataDecryptedStirng, ":")
+	serverDataArray := strings.Split(serverDataDecryptedStirng, ":::")
 	userID, err := strconv.Atoi(serverDataArray[1])
 	if err != nil {
 		return nil, err

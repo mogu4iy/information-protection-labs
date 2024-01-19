@@ -55,20 +55,7 @@ func main() {
 	
 	TCPAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-<<<<<<< HEAD
 		log.Fatalf("resolving TCP address: %s", err)
-=======
-		log.Fatalf("error initing store: %s", err)
-	}
-	defer func() {
-		_ = block.Store.Close()
-	}()
-	
-	
-	TCPAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("0.0.0.0:%v", Port))
-	if err != nil {
-		log.Fatalf("resolving UDP address: %s", err)
->>>>>>> f90850d67fe817c3a56bc2ac25cd8d54f236a3f6
 	}
 	
 	listener, err := net.ListenTCP("tcp", TCPAddr)

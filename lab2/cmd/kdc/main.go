@@ -36,7 +36,7 @@ var KDC = &KeyDistributionCenter{
 
 func handleUDPConnection(conn net.PacketConn, addr net.Addr, m []byte) {
 	dataString := string(m)
-	dataArray := strings.Split(dataString,":")
+	dataArray := strings.Split(dataString,":::")
 	IDA, err := strconv.Atoi(dataArray[0])
 	if err != nil {
 		return
@@ -45,7 +45,7 @@ func handleUDPConnection(conn net.PacketConn, addr net.Addr, m []byte) {
 	
 	decryptedData, err := kdc.Decrypt(KDC.users[IDA].Key, []byte(data))
 	decryptedDataString := string(decryptedData)
-	decryptedDataArray := strings.Split(decryptedDataString, ":")
+	decryptedDataArray := strings.Split(decryptedDataString, ":::")
 	r1, err := strconv.Atoi(decryptedDataArray[0])
 	if err != nil {
 		return
@@ -56,14 +56,14 @@ func handleUDPConnection(conn net.PacketConn, addr net.Addr, m []byte) {
 	}
 	
 	sessionKey := kdc.GenerateSessionKey(KDC.users[IDA].Key, KDC.users[IDB].Key)
-	sessionData := fmt.Sprintf("%s:%d", sessionKey, IDA)
+	sessionData := fmt.Sprintf("%s:::%d", sessionKey, IDA)
 	log.Printf("%d, %s", IDB, KDC.users[IDB].Key)
 	sessionDataEncrypted, err := kdc.Encrypt(KDC.users[IDB].Key, []byte(sessionData))
 	if err != nil {
 		return
 	}
 	log.Printf("%v \n", sessionData)
-	aData := fmt.Sprintf("%d:%s:%d:%s", kdc.RandFunc(r1), sessionKey, IDB, sessionDataEncrypted)
+	aData := fmt.Sprintf("%d:::%s:::%d:::%s", kdc.RandFunc(r1), sessionKey, IDB, sessionDataEncrypted)
 	
 	aDataEncrypted, err := kdc.Encrypt(KDC.users[IDA].Key, []byte(aData))
 	if err != nil {

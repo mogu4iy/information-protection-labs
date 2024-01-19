@@ -23,7 +23,7 @@ func Handshake(conn net.Conn, serverData string) error {
 	
 	request := &message.Request{
 		Command: constants.HNDSHKM,
-		Data: hex.EncodeToString([]byte(fmt.Sprintf("%s:%s", serverData, sessionData))),
+		Data: hex.EncodeToString([]byte(fmt.Sprintf("%s:::%s", serverData, sessionData))),
 	}
 	response := &message.Response{}
 
